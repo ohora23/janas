@@ -34,6 +34,35 @@ fold512_epi32(__m512i v)
 }
 
 /*
+ * The sums of eight zmm, one per vector, each over its sixteen lanes, in
+ * one ymm (exact): a tree of unpacks and adds, the 128-bit lanes last.
+ * 24 instructions where folding each to a ymm and vphaddd took about 35.
+ */
+static inline DOT512_TARGET __attribute__((always_inline)) __m256i
+sum8x16_epi32(const __m512i s[8])
+{
+    __m512i u01 = _mm512_add_epi32(_mm512_unpacklo_epi32(s[0], s[1]),
+                                   _mm512_unpackhi_epi32(s[0], s[1]));
+    __m512i u23 = _mm512_add_epi32(_mm512_unpacklo_epi32(s[2], s[3]),
+                                   _mm512_unpackhi_epi32(s[2], s[3]));
+    __m512i u45 = _mm512_add_epi32(_mm512_unpacklo_epi32(s[4], s[5]),
+                                   _mm512_unpackhi_epi32(s[4], s[5]));
+    __m512i u67 = _mm512_add_epi32(_mm512_unpacklo_epi32(s[6], s[7]),
+                                   _mm512_unpackhi_epi32(s[6], s[7]));
+    /* every 128-bit lane of v03: partial sums of s0 s1 s2 s3; v47: s4..s7 */
+    __m512i v03 = _mm512_add_epi32(_mm512_unpacklo_epi64(u01, u23),
+                                   _mm512_unpackhi_epi64(u01, u23));
+    __m512i v47 = _mm512_add_epi32(_mm512_unpacklo_epi64(u45, u67),
+                                   _mm512_unpackhi_epi64(u45, u67));
+    /* t = [A, A', B, B'] with A + A' = s0..s3 and B + B' = s4..s7 */
+    __m512i t = _mm512_add_epi32(_mm512_shuffle_i32x4(v03, v47, 0x44),
+                                 _mm512_shuffle_i32x4(v03, v47, 0xee));
+    __m512i r = _mm512_add_epi32(_mm512_shuffle_i32x4(t, t, 0x88),
+                                 _mm512_shuffle_i32x4(t, t, 0xdd));
+    return _mm512_castsi512_si256(r);
+}
+
+/*
  * Q4_K. A block's 128 bytes of nibbles are two zmm loads; in each, the
  * low nibbles are the weights of two 32-weight sub-blocks (2c and 2c+2)
  * and the high nibbles two more (2c+1 and 2c+3), where the activations
@@ -148,19 +177,7 @@ q4k_dotn_body_avx512(const struct janas_block_q4k *w,
             accm4n = _mm_fmadd_ps(_mm_mul_ps(_mm_set1_ps(dmw), d8),
                                   _mm_cvtepi32_ps(im4), accm4n);
         } else {
-            __m256i s01 = _mm256_hadd_epi32(fold512_epi32(sumi[0]),
-                                            fold512_epi32(sumi[1]));
-            __m256i s23 = _mm256_hadd_epi32(fold512_epi32(sumi[2]),
-                                            fold512_epi32(sumi[3]));
-            __m256i s45 = _mm256_hadd_epi32(fold512_epi32(sumi[4]),
-                                            fold512_epi32(sumi[5]));
-            __m256i s67 = _mm256_hadd_epi32(fold512_epi32(sumi[6]),
-                                            fold512_epi32(sumi[7]));
-            __m256i t0 = _mm256_hadd_epi32(s01, s23);
-            __m256i t1 = _mm256_hadd_epi32(s45, s67);
-            __m256i is8 =
-                _mm256_add_epi32(_mm256_permute2x128_si256(t0, t1, 0x20),
-                                 _mm256_permute2x128_si256(t0, t1, 0x31));
+            __m256i is8 = sum8x16_epi32(sumi);
             __m128i m03 = _mm_hadd_epi32(_mm_hadd_epi32(pm[0], pm[1]),
                                          _mm_hadd_epi32(pm[2], pm[3]));
             __m128i m47 = _mm_hadd_epi32(_mm_hadd_epi32(pm[4], pm[5]),
@@ -349,19 +366,7 @@ q5k_dotn_body_avx512(const struct janas_block_q5k *w,
             __m128 dd = _mm_setr_ps(dw, dw, dmw, dmw);
             acc4 = _mm_fmadd_ps(_mm_mul_ps(dd, d8), _mm_cvtepi32_ps(t), acc4);
         } else {
-            __m256i s01 = _mm256_hadd_epi32(fold512_epi32(sumi[0]),
-                                            fold512_epi32(sumi[1]));
-            __m256i s23 = _mm256_hadd_epi32(fold512_epi32(sumi[2]),
-                                            fold512_epi32(sumi[3]));
-            __m256i s45 = _mm256_hadd_epi32(fold512_epi32(sumi[4]),
-                                            fold512_epi32(sumi[5]));
-            __m256i s67 = _mm256_hadd_epi32(fold512_epi32(sumi[6]),
-                                            fold512_epi32(sumi[7]));
-            __m256i t0 = _mm256_hadd_epi32(s01, s23);
-            __m256i t1 = _mm256_hadd_epi32(s45, s67);
-            __m256i is8 =
-                _mm256_add_epi32(_mm256_permute2x128_si256(t0, t1, 0x20),
-                                 _mm256_permute2x128_si256(t0, t1, 0x31));
+            __m256i is8 = sum8x16_epi32(sumi);
             __m128i m03 = _mm_hadd_epi32(_mm_hadd_epi32(pm[0], pm[1]),
                                          _mm_hadd_epi32(pm[2], pm[3]));
             __m128i m47 = _mm_hadd_epi32(_mm_hadd_epi32(pm[4], pm[5]),
@@ -454,20 +459,18 @@ q6k_dotn_body_avx512(const struct janas_block_q6k *w,
             }
         }
         float dw = _cvtsh_ss(w[b].d);
-        __m256i si[8];
-        _Pragma("GCC unroll 8") for (int v = 0; v < 8; v++)
+        /* the -32 offset, 32 x scale x activation sums, off the sums in
+           place (exact; the upper lanes of the zero-extended ymm are 0) */
+        _Pragma("GCC unroll 8") for (int v = 0; v < nv; v++)
         {
-            si[v] = _mm256_setzero_si256();
-            if (v < nv) {
-                const struct janas_block_q8k *xb = x + (size_t)v * xs + b;
-                __m256i bs = _mm256_loadu_si256((const __m256i *)xb->bsums);
-                __m256i off =
-                    _mm256_slli_epi32(_mm256_madd_epi16(sc16w, bs), 5);
-                si[v] = _mm256_sub_epi32(fold512_epi32(sumi[v]), off);
-            }
+            const struct janas_block_q8k *xb = x + (size_t)v * xs + b;
+            __m256i bs = _mm256_loadu_si256((const __m256i *)xb->bsums);
+            __m256i off = _mm256_slli_epi32(_mm256_madd_epi16(sc16w, bs), 5);
+            sumi[v] = _mm512_sub_epi32(sumi[v], _mm512_zextsi256_si512(off));
         }
         if (nv <= 2) {
-            __m256i a = _mm256_hadd_epi32(si[0], si[1]);
+            __m256i a = _mm256_hadd_epi32(fold512_epi32(sumi[0]),
+                                          fold512_epi32(sumi[1]));
             __m128i h = _mm_add_epi32(_mm256_castsi256_si128(a),
                                       _mm256_extracti128_si256(a, 1));
             __m128i t = _mm_hadd_epi32(h, h);
@@ -476,15 +479,7 @@ q6k_dotn_body_avx512(const struct janas_block_q6k *w,
             acc4 = _mm_fmadd_ps(_mm_mul_ps(_mm_set1_ps(dw), d8),
                                 _mm_cvtepi32_ps(t), acc4);
         } else {
-            __m256i s01 = _mm256_hadd_epi32(si[0], si[1]);
-            __m256i s23 = _mm256_hadd_epi32(si[2], si[3]);
-            __m256i s45 = _mm256_hadd_epi32(si[4], si[5]);
-            __m256i s67 = _mm256_hadd_epi32(si[6], si[7]);
-            __m256i t0 = _mm256_hadd_epi32(s01, s23);
-            __m256i t1 = _mm256_hadd_epi32(s45, s67);
-            __m256i is8 =
-                _mm256_add_epi32(_mm256_permute2x128_si256(t0, t1, 0x20),
-                                 _mm256_permute2x128_si256(t0, t1, 0x31));
+            __m256i is8 = sum8x16_epi32(sumi);
 #define D8(v) (v < nv ? x[(size_t)(v) * xs + b].d : 0.0f)
             __m256 d8 = _mm256_setr_ps(D8(0), D8(1), D8(2), D8(3), D8(4), D8(5),
                                        D8(6), D8(7));
