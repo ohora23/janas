@@ -1189,7 +1189,7 @@ typedef void (*dotn6p_fn)(const struct janas_block_q6kp *, const uint8_t *,
 static dotn6p_fn dot6p_impl; /* NULL: the scalar reference */
 static const char *dot_name = "ref";
 static int use_vnni;
-static int use_avx512; /* AVX-512 F/BW/VL/VNNI: 512-bit kernels where they exist */
+static int use_avx512; /* F/BW/VL/VNNI: the 512-bit kernels */
 
 /* Resolved before main: the kernels are first called from pool threads. */
 __attribute__((constructor)) static void dot_kernels_init(void)
@@ -1576,23 +1576,23 @@ void janas_dot_rows(int type, const void *w, size_t row_bytes,
         switch (type) {
         case JANAS_Q4_K:
             f = use_avx512 ? q4k_rows_avx512
-                : use_vnni   ? q4k_rows_vnni
-                             : q4k_rows_avx2;
+                : use_vnni ? q4k_rows_vnni
+                           : q4k_rows_avx2;
             break;
         case JANAS_Q6_K:
             f = use_avx512 ? q6k_rows_avx512
-                : use_vnni   ? q6k_rows_vnni
-                             : q6k_rows_avx2;
+                : use_vnni ? q6k_rows_vnni
+                           : q6k_rows_avx2;
             break;
         case JANAS_Q5_K:
             f = use_avx512 ? q5k_rows_avx512
-                : use_vnni   ? q5k_rows_vnni
-                             : q5k_rows_avx2;
+                : use_vnni ? q5k_rows_vnni
+                           : q5k_rows_avx2;
             break;
         case JANAS_Q8_0:
             f = use_avx512 ? q8_0_rows_avx512
-                : use_vnni   ? q8_0_rows_vnni
-                             : q8_0_rows_avx2;
+                : use_vnni ? q8_0_rows_vnni
+                           : q8_0_rows_avx2;
             break;
         case JANAS_IQ4_NL:
             f = use_vnni ? iq4nl_rows_vnni : iq4nl_rows_avx2;

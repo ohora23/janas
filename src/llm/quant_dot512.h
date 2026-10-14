@@ -23,7 +23,8 @@
  */
 
 #define DOT512_TARGET                                                          \
-    __attribute__((target("avx2,fma,f16c,avxvnni,avx512f,avx512bw,avx512vl,avx512vnni")))
+    __attribute__((                                                            \
+        target("avx2,fma,f16c,avxvnni,avx512f,avx512bw,avx512vl,avx512vnni")))
 
 /* The low ymm plus the high ymm of v (exact). */
 static inline DOT512_TARGET __attribute__((always_inline)) __m256i
@@ -97,8 +98,7 @@ q4k_dotn_body_avx512(const struct janas_block_q4k *w,
         _Pragma("GCC unroll 2") for (int c = 0; c < 2; c++)
         {
             /* the bytes of pieces 2c and 2c+1 */
-            __m512i q4 =
-                _mm512_loadu_si512((const void *)(w[b].qs + 64 * c));
+            __m512i q4 = _mm512_loadu_si512((const void *)(w[b].qs + 64 * c));
             __m512i lo = _mm512_and_si512(q4, low4);
             __m512i hi = _mm512_and_si512(_mm512_srli_epi16(q4, 4), low4);
             /* lo = [sub 4c, sub 4c+2], hi = [sub 4c+1, sub 4c+3] (32 bytes
@@ -124,8 +124,8 @@ q4k_dotn_body_avx512(const struct janas_block_q4k *w,
                 const int8_t *a = x[(size_t)v * xs + b].qs + 128 * c;
                 __m512i a0 = _mm512_loadu_si512((const void *)a);
                 __m512i a1 = _mm512_loadu_si512((const void *)(a + 64));
-                sumi[v] = _mm512_dpwssd_epi32(
-                    sumi[v], _mm512_maddubs_epi16(w0, a0), s0);
+                sumi[v] = _mm512_dpwssd_epi32(sumi[v],
+                                              _mm512_maddubs_epi16(w0, a0), s0);
                 if (nv <= 2)
                     sumh[v] = _mm512_dpwssd_epi32(
                         sumh[v], _mm512_maddubs_epi16(w1, a1), s1);
@@ -161,11 +161,11 @@ q4k_dotn_body_avx512(const struct janas_block_q4k *w,
             __m128 dd = _mm_setr_ps(dw, dw, dmw, dmw);
             acc4 = _mm_fmadd_ps(_mm_mul_ps(dd, d8), _mm_cvtepi32_ps(t), acc4);
         } else if (nv <= 4) {
-            __m256i t = _mm256_hadd_epi32(
-                _mm256_hadd_epi32(fold512_epi32(sumi[0]),
-                                  fold512_epi32(sumi[1])),
-                _mm256_hadd_epi32(fold512_epi32(sumi[2]),
-                                  fold512_epi32(sumi[3])));
+            __m256i t =
+                _mm256_hadd_epi32(_mm256_hadd_epi32(fold512_epi32(sumi[0]),
+                                                    fold512_epi32(sumi[1])),
+                                  _mm256_hadd_epi32(fold512_epi32(sumi[2]),
+                                                    fold512_epi32(sumi[3])));
             __m128i is4 = _mm_add_epi32(_mm256_castsi256_si128(t),
                                         _mm256_extracti128_si256(t, 1));
             __m128i im4 = _mm_hadd_epi32(_mm_hadd_epi32(pm[0], pm[1]),
@@ -261,11 +261,10 @@ static DOT512_TARGET void q4k_rows_avx512(const void *w, size_t row_bytes,
             x, nb);
 }
 
-
 /* A zmm whose low ymm holds the int16 lo in every lane and the high ymm hi:
    per-half shift counts and scale indices. */
 #define HALVES_EPI16(lo, hi)                                                   \
-    _mm512_inserti64x4(_mm512_castsi256_si512(_mm256_set1_epi16(lo)),           \
+    _mm512_inserti64x4(_mm512_castsi256_si512(_mm256_set1_epi16(lo)),          \
                        _mm256_set1_epi16(hi), 1)
 
 /*
@@ -304,18 +303,17 @@ q5k_dotn_body_avx512(const struct janas_block_q5k *w,
             _mm512_setzero_si512();
         _Pragma("GCC unroll 2") for (int c = 0; c < 2; c++)
         {
-            __m512i q4 =
-                _mm512_loadu_si512((const void *)(w[b].qs + 64 * c));
+            __m512i q4 = _mm512_loadu_si512((const void *)(w[b].qs + 64 * c));
             __m512i lo = _mm512_and_si512(q4, low4);
             __m512i hi = _mm512_and_si512(_mm512_srli_epi16(q4, 4), low4);
             lo = _mm512_or_si512(
-                lo, _mm512_slli_epi16(
-                        _mm512_and_si512(_mm512_srlv_epi16(qh2, shlo[c]), one),
-                        4));
+                lo,
+                _mm512_slli_epi16(
+                    _mm512_and_si512(_mm512_srlv_epi16(qh2, shlo[c]), one), 4));
             hi = _mm512_or_si512(
-                hi, _mm512_slli_epi16(
-                        _mm512_and_si512(_mm512_srlv_epi16(qh2, shhi[c]), one),
-                        4));
+                hi,
+                _mm512_slli_epi16(
+                    _mm512_and_si512(_mm512_srlv_epi16(qh2, shhi[c]), one), 4));
             __m512i w0 = _mm512_shuffle_i64x2(lo, hi, 0x44);
             __m512i w1 = _mm512_shuffle_i64x2(lo, hi, 0xee);
             const int sb = 4 * c;
@@ -330,8 +328,8 @@ q5k_dotn_body_avx512(const struct janas_block_q5k *w,
                 const int8_t *a = x[(size_t)v * xs + b].qs + 128 * c;
                 __m512i a0 = _mm512_loadu_si512((const void *)a);
                 __m512i a1 = _mm512_loadu_si512((const void *)(a + 64));
-                sumi[v] = _mm512_dpwssd_epi32(
-                    sumi[v], _mm512_maddubs_epi16(w0, a0), s0);
+                sumi[v] = _mm512_dpwssd_epi32(sumi[v],
+                                              _mm512_maddubs_epi16(w0, a0), s0);
                 if (nv <= 2)
                     sumh[v] = _mm512_dpwssd_epi32(
                         sumh[v], _mm512_maddubs_epi16(w1, a1), s1);
@@ -412,9 +410,9 @@ q6k_dotn_body_avx512(const struct janas_block_q6k *w,
     const __m512i low2 = _mm512_set1_epi8(0x03);
     const __m512i sh02 = HALVES_EPI16(0, 2), sh46 = HALVES_EPI16(4, 6);
     /* lane l -> scale l / 8: four scales over the four 128-bit lanes */
-    const __m512i sidx = _mm512_set_epi16(
-        3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1,
-        0, 0, 0, 0, 0, 0, 0, 0);
+    const __m512i sidx =
+        _mm512_set_epi16(3, 3, 3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1,
+                         1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0);
     __m128 acc4 = _mm_setzero_ps();
     __m256 acc8 = _mm256_setzero_ps();
     for (size_t b = 0; b < nb; b++) {
@@ -429,8 +427,7 @@ q6k_dotn_body_avx512(const struct janas_block_q6k *w,
             _mm512_setzero_si512();
         _Pragma("GCC unroll 2") for (int n = 0; n < 2; n++)
         {
-            __m512i ql =
-                _mm512_loadu_si512((const void *)(w[b].ql + 64 * n));
+            __m512i ql = _mm512_loadu_si512((const void *)(w[b].ql + 64 * n));
             __m512i qh2 = _mm512_broadcast_i64x4(
                 _mm256_loadu_si256((const __m256i *)(w[b].qh + 32 * n)));
             __m512i q01 = _mm512_or_si512(
@@ -525,8 +522,8 @@ q8_0_dotn_body_avx512(const struct janas_block_q8_0 *w,
         _Pragma("GCC unroll 4") for (int j = 0; j < 4; j++) wu[j] =
             _mm512_xor_si512(
                 _mm512_inserti64x4(
-                    _mm512_castsi256_si512(_mm256_loadu_si256(
-                        (const __m256i *)wb[2 * j].qs)),
+                    _mm512_castsi256_si512(
+                        _mm256_loadu_si256((const __m256i *)wb[2 * j].qs)),
                     _mm256_loadu_si256((const __m256i *)wb[2 * j + 1].qs), 1),
                 x80);
         _Pragma("GCC unroll 8") for (int v = 0; v < nv; v++)
