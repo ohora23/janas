@@ -1239,6 +1239,9 @@ __attribute__((constructor)) static void dot_kernels_init(void)
                 !(k && !strcmp(k, "avx-vnni"))) {
                 use_avx512 = 1;
                 dot_impl = q4k_dot_avx512;
+                dot5_impl = q5k_dot_avx512;
+                dot6_impl = q6k_dot_avx512;
+                dot80_impl = q8_0_dot_avx512;
                 dot_name = "avx512-vnni";
             }
         }
@@ -1577,13 +1580,19 @@ void janas_dot_rows(int type, const void *w, size_t row_bytes,
                              : q4k_rows_avx2;
             break;
         case JANAS_Q6_K:
-            f = use_vnni ? q6k_rows_vnni : q6k_rows_avx2;
+            f = use_avx512 ? q6k_rows_avx512
+                : use_vnni   ? q6k_rows_vnni
+                             : q6k_rows_avx2;
             break;
         case JANAS_Q5_K:
-            f = use_vnni ? q5k_rows_vnni : q5k_rows_avx2;
+            f = use_avx512 ? q5k_rows_avx512
+                : use_vnni   ? q5k_rows_vnni
+                             : q5k_rows_avx2;
             break;
         case JANAS_Q8_0:
-            f = use_vnni ? q8_0_rows_vnni : q8_0_rows_avx2;
+            f = use_avx512 ? q8_0_rows_avx512
+                : use_vnni   ? q8_0_rows_vnni
+                             : q8_0_rows_avx2;
             break;
         case JANAS_IQ4_NL:
             f = use_vnni ? iq4nl_rows_vnni : iq4nl_rows_avx2;
@@ -1644,12 +1653,14 @@ void janas_dot_multi(int type, const void *w, const struct janas_block_q8k *x,
                             : q4k_dotn_avx2)(w, xv, x_stride, g, nb, r);
                 break;
             case JANAS_Q6_K:
-                (use_vnni ? q6k_dotn_vnni : q6k_dotn_avx2)(w, xv, x_stride, g,
-                                                           nb, r);
+                (use_avx512 ? q6k_dotn_avx512
+                 : use_vnni ? q6k_dotn_vnni
+                            : q6k_dotn_avx2)(w, xv, x_stride, g, nb, r);
                 break;
             case JANAS_Q5_K:
-                (use_vnni ? q5k_dotn_vnni : q5k_dotn_avx2)(w, xv, x_stride, g,
-                                                           nb, r);
+                (use_avx512 ? q5k_dotn_avx512
+                 : use_vnni ? q5k_dotn_vnni
+                            : q5k_dotn_avx2)(w, xv, x_stride, g, nb, r);
                 break;
             case JANAS_IQ4_NL:
                 (use_vnni ? iq4nl_dotn_vnni : iq4nl_dotn_avx2)(w, xv, x_stride,
@@ -1684,8 +1695,9 @@ void janas_dot_multi(int type, const void *w, const struct janas_block_q8k *x,
                                                              nb, r);
                 break;
             default:
-                (use_vnni ? q8_0_dotn_vnni : q8_0_dotn_avx2)(w, xv, x_stride, g,
-                                                             nb, r);
+                (use_avx512 ? q8_0_dotn_avx512
+                 : use_vnni ? q8_0_dotn_vnni
+                            : q8_0_dotn_avx2)(w, xv, x_stride, g, nb, r);
             }
             for (int i = 0; i < g; i++)
                 out[(v + (size_t)i) * out_stride] = r[i];
